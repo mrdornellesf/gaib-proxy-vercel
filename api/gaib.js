@@ -4,6 +4,7 @@ import puppeteer from "puppeteer-core";
 const APP_URL = process.env.APP_URL || "https://pre-vault.gaib.ai";
 
 export default async function handler(req, res) {
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
@@ -14,11 +15,26 @@ export default async function handler(req, res) {
 
   let browser;
   try {
+    // 1) Resolva o caminho do Chromium empacotado
+    const execPath = await chromium.executablePath; // (Promise<string>)
+    if (!execPath) {
+      throw new Error("Chromium executablePath not resolved (chrome-aws-lambda).");
+    }
+    // 2) (belt & suspenders) Informe ao puppeteer via env também
+    process.env.PUPPETEER_EXECUTABLE_PATH = execPath;
+
+    // 3) Lance o navegador SEM baixar nada
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ],
       defaultViewport: { width: 1200, height: 800 },
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless
+      executablePath: execPath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true
     });
 
     const page = await browser.newPage();
@@ -26,11 +42,16 @@ export default async function handler(req, res) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
     );
 
+    // Abre o domínio autorizado (gera Origin correto)
     await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
 
+    // Faz o fetch DENTRO do navegador
     const result = await page.evaluate(async ({ pageNum, pageSize }) => {
       const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
-      const r = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" } });
+      const r = await fetch(url, {
+        method: "GET",
+        headers: { accept: "application/json, text/plain, */*" }
+      });
       const text = await r.text();
       return { status: r.status, text };
     }, { pageNum, pageSize });
