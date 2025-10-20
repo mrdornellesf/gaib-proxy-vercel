@@ -4,7 +4,6 @@ import puppeteer from "puppeteer-core";
 const APP_URL = process.env.APP_URL || "https://pre-vault.gaib.ai";
 
 export default async function handler(req, res) {
-  // CORS para GAS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
@@ -18,7 +17,7 @@ export default async function handler(req, res) {
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: { width: 1200, height: 800 },
-      executablePath: await chromium.executablePath, // binário empacotado
+      executablePath: await chromium.executablePath,
       headless: chromium.headless
     });
 
@@ -31,10 +30,7 @@ export default async function handler(req, res) {
 
     const result = await page.evaluate(async ({ pageNum, pageSize }) => {
       const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
-      const r = await fetch(url, {
-        method: "GET",
-        headers: { accept: "application/json, text/plain, */*" }
-      });
+      const r = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" } });
       const text = await r.text();
       return { status: r.status, text };
     }, { pageNum, pageSize });
