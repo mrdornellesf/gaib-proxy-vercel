@@ -4,6 +4,7 @@ import puppeteer from "puppeteer-core";
 const APP_URL = process.env.APP_URL || "https://pre-vault.gaib.ai";
 
 export default async function handler(req, res) {
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
@@ -15,12 +16,21 @@ export default async function handler(req, res) {
   chromium.setHeadlessMode = true;
   chromium.setGraphicsMode = false;
 
+  const launchArgs = [
+    ...chromium.args,
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--single-process",
+    "--disable-gpu"
+  ];
+
   let browser;
   try {
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: launchArgs,
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(), // usa o binário empacotado
       headless: chromium.headless
     });
 
@@ -29,11 +39,15 @@ export default async function handler(req, res) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
     );
 
+    // abre o domínio autorizado (gera Origin correto)
     await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
 
     const result = await page.evaluate(async ({ pageNum, pageSize }) => {
       const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
-      const r = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" } });
+      const r = await fetch(url, {
+        method: "GET",
+        headers: { accept: "application/json, text/plain, */*" }
+      });
       const text = await r.text();
       return { status: r.status, text };
     }, { pageNum, pageSize });
