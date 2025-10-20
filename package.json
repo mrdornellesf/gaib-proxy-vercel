@@ -4,8 +4,7 @@
     "private": true,
     "type": "module",
     "dependencies": {
-      "chrome-aws-lambda": "^10.1.0",
+      "@sparticuz/chromium": "^134.0.0",
       "puppeteer-core": "^22.15.0"
     }
   }
-  
