@@ -1,10 +1,10 @@
-import chromium from "@sparticuz/chromium";
+import chromium from "chrome-aws-lambda";
 import puppeteer from "puppeteer-core";
 
 const APP_URL = process.env.APP_URL || "https://pre-vault.gaib.ai";
 
 export default async function handler(req, res) {
-  // CORS
+  // CORS para GAS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
@@ -13,24 +13,12 @@ export default async function handler(req, res) {
   const pageNum  = String(req.query.page || "1");
   const pageSize = String(req.query.pageSize || "100");
 
-  chromium.setHeadlessMode = true;
-  chromium.setGraphicsMode = false;
-
-  const launchArgs = [
-    ...chromium.args,
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--single-process",
-    "--disable-gpu"
-  ];
-
   let browser;
   try {
     browser = await puppeteer.launch({
-      args: launchArgs,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(), // usa o binário empacotado
+      args: chromium.args,
+      defaultViewport: { width: 1200, height: 800 },
+      executablePath: await chromium.executablePath, // binário empacotado
       headless: chromium.headless
     });
 
@@ -39,7 +27,6 @@ export default async function handler(req, res) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
     );
 
-    // abre o domínio autorizado (gera Origin correto)
     await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
 
     const result = await page.evaluate(async ({ pageNum, pageSize }) => {
