@@ -4,7 +4,6 @@ import puppeteer from "puppeteer-core";
 const APP_URL = process.env.APP_URL || "https://pre-vault.gaib.ai";
 
 export default async function handler(req, res) {
-  // CORS p/ GAS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
@@ -13,8 +12,8 @@ export default async function handler(req, res) {
   const pageNum  = String(req.query.page || "1");
   const pageSize = String(req.query.pageSize || "100");
 
-  chromium.setHeadlessMode = true;   // headless-only
-  chromium.setGraphicsMode = false;  // sem aceleração gráfica
+  chromium.setHeadlessMode = true;
+  chromium.setGraphicsMode = false;
 
   let browser;
   try {
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
+      headless: chromium.headless
     });
 
     const page = await browser.newPage();
@@ -30,17 +29,11 @@ export default async function handler(req, res) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
     );
 
-    // 1) Abre o domínio autorizado (gera Origin correto)
     await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // 2) Faz o fetch de dentro do navegador
     const result = await page.evaluate(async ({ pageNum, pageSize }) => {
       const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
-      const r = await fetch(url, {
-        method: "GET",
-        headers: { accept: "application/json, text/plain, */*" }
-        // credentials: "include" // habilite se um dia precisar de cookies de sessão
-      });
+      const r = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" } });
       const text = await r.text();
       return { status: r.status, text };
     }, { pageNum, pageSize });
