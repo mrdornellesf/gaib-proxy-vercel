@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.47.2-jammy
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
