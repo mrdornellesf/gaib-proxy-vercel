@@ -1,11 +1,14 @@
 {
-    "name": "gaib-proxy-vercel",
+    "name": "gaib-proxy",
     "version": "1.0.0",
-    "private": true,
     "type": "module",
+    "private": true,
+    "scripts": {
+      "start": "node server.js"
+    },
     "dependencies": {
-      "@sparticuz/chromium": "122.0.0",
-      "puppeteer-core": "21.3.8"
+      "express": "^4.19.2",
+      "playwright": "^1.47.2"
     }
   }
   
