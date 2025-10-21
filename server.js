@@ -1,65 +1,90 @@
+// server.js
+import express from "express";
+import { chromium } from "playwright";
+
+const PORT = process.env.PORT || 3000;
+// vamos falar direto com a API; o Origin será ajustado via intercept
+const API_HOST = "pre-vault-api.gaib.ai";
+
+// cria o app Express
+const app = express();
+
+// healthcheck root
+app.get("/", (_req, res) => res.type("text").send("ok"));
+
+// navegador compartilhado
+let browser;
+async function getBrowser() {
+  if (!browser) {
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    });
+  }
+  return browser;
+}
+
+// endpoint proxy
 app.get("/gaib", async (req, res) => {
-    const pageNum  = String(req.query.page || "1");
-    const pageSize = String(req.query.pageSize || "100");
-  
-    let context;
-    try {
-      const br = await getBrowser();
-      context = await br.newContext({
-        userAgent:
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
-      });
-      const page = await context.newPage();
-  
-      // 1) Intercepta QUALQUER request para o host da API e injeta headers de "app autorizado"
-      const API_HOST = "pre-vault-api.gaib.ai";
-      const SPOOF_ORIGIN  = "https://gaib.ai";        // tente também "https://vault.gaib.ai" ou "https://pre-vault.gaib.ai"
-      const SPOOF_REFERER = "https://gaib.ai/";       // idem acima
-  
-      await page.route("**/*", async (route, request) => {
-        const url = new URL(request.url());
-        if (url.hostname === API_HOST) {
-          const headers = {
-            ...request.headers(),
-            "origin": SPOOF_ORIGIN,
-            "referer": SPOOF_REFERER,
-            "sec-fetch-site": "same-origin",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-dest": "empty",
-            "accept": "application/json, text/plain, */*",
-            "accept-language": "en-US,en;q=0.9"
-          };
-          await route.continue({ headers });
-        } else {
-          await route.continue();
-        }
-      });
-  
-      // 2) Dispara o fetch a partir do browser (NÃO navega; só chama a API direto)
-      const result = await page.evaluate(async ({ pageNum, pageSize }) => {
-        const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
-        const r = await fetch(url, {
-          method: "GET",
-          // estes headers serão sobreescritos pelo route(), mas deixamos aqui por redundância
-          headers: { "accept": "application/json, text/plain, */*" },
-          credentials: "include"
-        });
-        const text = await r.text();
-        return { status: r.status, text };
-      }, { pageNum, pageSize });
-  
-      await context.close();
-  
-      res
-        .status(result.status)
-        .set("content-type", "application/json; charset=utf-8")
-        .set("cache-control", "no-store")
-        .set("access-control-allow-origin", "*")
-        .send(result.text);
-    } catch (e) {
-      if (context) try { await context.close(); } catch {}
-      console.error(e);
-      res.status(500).json({ error: "proxy_failed", message: String(e?.message || e) });
-    }
-  });
-  
+  const pageNum  = String(req.query.page || "1");
+  const pageSize = String(req.query.pageSize || "100");
+
+  let context;
+  try {
+    const br = await getBrowser();
+    context = await br.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    });
+    const page = await context.newPage();
+
+    // Intercepta chamadas p/ API e injeta headers de origem/autorização
+    const SPOOF_ORIGIN  = "https://gaib.ai";   // se der 403, troque p/ "https://vault.gaib.ai" ou "https://pre-vault.gaib.ai"
+    const SPOOF_REFERER = "https://gaib.ai/";  // mantenha a barra final
+
+    await page.route("**/*", async (route, request) => {
+      const url = new URL(request.url());
+      if (url.hostname === API_HOST) {
+        const headers = {
+          ...request.headers(),
+          "origin": SPOOF_ORIGIN,
+          "referer": SPOOF_REFERER,
+          "sec-fetch-site": "same-origin",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-dest": "empty",
+          "accept": "application/json, text/plain, */*",
+          "accept-language": "en-US,en;q=0.9"
+        };
+        await route.continue({ headers });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // Dispara o fetch a partir do browser
+    const result = await page.evaluate(async ({ pageNum, pageSize }) => {
+      const url = `https://pre-vault-api.gaib.ai/points/leaderboard?page=${encodeURIComponent(pageNum)}&pageSize=${encodeURIComponent(pageSize)}`;
+      const r = await fetch(url, { method: "GET", headers: { accept: "application/json, text/plain, */*" }, credentials: "include" });
+      const text = await r.text();
+      return { status: r.status, text };
+    }, { pageNum, pageSize });
+
+    await context.close();
+
+    res
+      .status(result.status)
+      .set("content-type", "application/json; charset=utf-8")
+      .set("cache-control", "no-store")
+      .set("access-control-allow-origin", "*")
+      .send(result.text);
+  } catch (e) {
+    if (context) try { await context.close(); } catch {}
+    console.error(e);
+    res.status(500).json({ error: "proxy_failed", message: String(e?.message || e) });
+  }
+});
+
+// inicia o servidor
+app.listen(PORT, () => {
+  console.log(`GAIB proxy listening on :${PORT}`);
+});
